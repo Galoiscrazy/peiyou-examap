@@ -33,7 +33,7 @@ export default function HomePage() {
   }, []);
 
   async function fetchStudents() {
-    const res = await fetch('/api/students');
+    const res = await fetch('/api/students', { cache: 'no-store' });
     const data = await res.json();
     setStudents(data);
   }
@@ -53,10 +53,10 @@ export default function HomePage() {
         body: JSON.stringify(form),
       });
     }
+    await fetchStudents();
     setShowForm(false);
     setEditingStudent(null);
     setForm(emptyForm());
-    fetchStudents();
   }
 
   function handleEdit(e: React.MouseEvent, student: Student) {

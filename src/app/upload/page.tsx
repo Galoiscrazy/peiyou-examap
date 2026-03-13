@@ -125,7 +125,7 @@ export default function UploadPage() {
         buffer = events.pop()!;
 
         for (const event of events) {
-          const eventMatch = event.match(/^event: (\w+)\ndata: (.+)$/s);
+          const eventMatch = event.match(/^event: (\w+)\ndata: ([\s\S]+)$/);
           if (!eventMatch) continue;
           const [, type, data] = eventMatch;
           const parsed = JSON.parse(data);
