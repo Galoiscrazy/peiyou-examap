@@ -31,3 +31,5 @@ data/_uploads_list.txt
 nul
 ~$*
 tsconfig.tsbuildinfo
+git_out.txt
+*.xlsx
