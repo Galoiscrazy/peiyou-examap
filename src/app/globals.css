@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg: #f8fafc;
+  --color-sidebar: #1e293b;
+  --color-primary: #3b82f6;
+  --color-mastery-none: #e2e8f0;
+  --color-mastery-red: #ef4444;
+  --color-mastery-yellow: #eab308;
+  --color-mastery-green: #22c55e;
+}
+
+body {
+  background: var(--color-bg);
+  color: #1e293b;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+/* Star rating colors */
+.star-filled {
+  color: #f59e0b;
+}
+.star-empty {
+  color: #e2e8f0;
+}
+
+/* Knowledge tree animations */
+.tree-node-enter {
+  animation: slideDown 0.2s ease-out;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Mastery color dots */
+.mastery-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.mastery-none { background: var(--color-mastery-none); }
+.mastery-red { background: var(--color-mastery-red); }
+.mastery-yellow { background: var(--color-mastery-yellow); }
+.mastery-green { background: var(--color-mastery-green); }
+
+/* Heatmap colors */
+.heat-0 { background: #f1f5f9; }
+.heat-1 { background: #fef3c7; }
+.heat-2 { background: #fde68a; }
+.heat-3 { background: #fbbf24; }
+.heat-4 { background: #f59e0b; }
+.heat-5 { background: #d97706; }

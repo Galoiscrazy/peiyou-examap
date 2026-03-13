@@ -1,0 +1,33 @@
+node_modules/
+.next/
+out/
+
+# 数据库文件（每台机器从Excel重新导入）
+data/physics.db
+data/physics.db-shm
+data/physics.db-wal
+
+# 上传的题目截图
+data/uploads/*
+!data/uploads/.gitkeep
+
+# 系统临时文件
+*.log
+.DS_Store
+Thumbs.db
+db_output.txt
+_ls.txt
+versions.txt
+_verify.json
+_npm_path.txt
+
+# Claude调试/临时文件
+data/_claude_debug.txt
+data/_test*.txt
+data/_prompt.txt
+data/_uploads_list.txt
+
+# Windows / 临时文件
+nul
+~$*
+tsconfig.tsbuildinfo
