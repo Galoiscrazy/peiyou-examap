@@ -84,7 +84,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
 
   // Edit student modal
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', school: '', initial_grade: 1, enrollment_year: getAcademicYear() });
+  const [editForm, setEditForm] = useState({ name: '', school: '', current_grade: 1 });
 
   // History filters
   const [historySearch, setHistorySearch] = useState('');
@@ -134,21 +134,29 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
 
   function openEditModal() {
     if (!student) return;
+    const gradeMap: Record<string, number> = { '高一': 1, '高二': 2, '高三': 3 };
+    const gradeNum = gradeMap[student.current_grade] || student.initial_grade;
     setEditForm({
       name: student.name,
       school: student.school,
-      initial_grade: student.initial_grade,
-      enrollment_year: student.enrollment_year,
+      current_grade: gradeNum,
     });
     setShowEditModal(true);
   }
 
   async function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const academicYear = getAcademicYear();
+    const payload = {
+      name: editForm.name,
+      school: editForm.school,
+      initial_grade: editForm.current_grade,
+      enrollment_year: academicYear,
+    };
     await fetch(`/api/students/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editForm),
+      body: JSON.stringify(payload),
     });
     setShowEditModal(false);
     const data = await fetch(`/api/students/${id}`).then(r => r.json());
@@ -223,28 +231,17 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-1">当前年级 *</label>
-                  <select
-                    value={editForm.initial_grade}
-                    onChange={e => setEditForm({ ...editForm, initial_grade: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={1}>高一</option>
-                    <option value={2}>高二</option>
-                    <option value={3}>高三</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-1">入档年份 *</label>
-                  <input
-                    type="number"
-                    value={editForm.enrollment_year}
-                    onChange={e => setEditForm({ ...editForm, enrollment_year: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">当前年级 *</label>
+                <select
+                  value={editForm.current_grade}
+                  onChange={e => setEditForm({ ...editForm, current_grade: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={1}>高一</option>
+                  <option value={2}>高二</option>
+                  <option value={3}>高三</option>
+                </select>
               </div>
               <div className="flex gap-3 justify-end">
                 <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50">

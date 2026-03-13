@@ -19,7 +19,7 @@ function getAcademicYear() {
   return now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
 }
 
-const emptyForm = () => ({ name: '', school: '', initial_grade: 1, enrollment_year: getAcademicYear() });
+const emptyForm = () => ({ name: '', school: '', current_grade: 1 });
 
 export default function HomePage() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -40,17 +40,27 @@ export default function HomePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // 用户只选"当前年级"，系统自动反推 initial_grade 和 enrollment_year
+    // 逻辑：initial_grade = current_grade, enrollment_year = academicYear
+    // 这样 getCurrentGrade() = initial_grade + (academicYear - enrollment_year) = current_grade + 0 = current_grade
+    const academicYear = getAcademicYear();
+    const payload = {
+      name: form.name,
+      school: form.school,
+      initial_grade: form.current_grade,
+      enrollment_year: academicYear,
+    };
     if (editingStudent) {
       await fetch(`/api/students/${editingStudent.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
     } else {
       await fetch('/api/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
     }
     await fetchStudents();
@@ -63,11 +73,13 @@ export default function HomePage() {
     e.preventDefault();
     e.stopPropagation();
     setEditingStudent(student);
+    // 从 current_grade 字符串反推数字：高一=1, 高二=2, 高三=3
+    const gradeMap: Record<string, number> = { '高一': 1, '高二': 2, '高三': 3 };
+    const gradeNum = gradeMap[student.current_grade] || student.initial_grade;
     setForm({
       name: student.name,
       school: student.school,
-      initial_grade: student.initial_grade,
-      enrollment_year: student.enrollment_year,
+      current_grade: gradeNum,
     });
     setShowForm(true);
   }
@@ -137,28 +149,17 @@ export default function HomePage() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-1">当前年级 *</label>
-                  <select
-                    value={form.initial_grade}
-                    onChange={e => setForm({ ...form, initial_grade: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={1}>高一</option>
-                    <option value={2}>高二</option>
-                    <option value={3}>高三</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-1">入档年份 *</label>
-                  <input
-                    type="number"
-                    value={form.enrollment_year}
-                    onChange={e => setForm({ ...form, enrollment_year: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">当前年级 *</label>
+                <select
+                  value={form.current_grade}
+                  onChange={e => setForm({ ...form, current_grade: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={1}>高一</option>
+                  <option value={2}>高二</option>
+                  <option value={3}>高三</option>
+                </select>
               </div>
               <div className="flex gap-3 justify-end">
                 <button type="button" onClick={handleCloseForm} className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50">
