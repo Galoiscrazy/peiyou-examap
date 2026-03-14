@@ -276,17 +276,10 @@ function normalize(parsed: Record<string, unknown>): AnalysisResult {
 }
 
 /**
- * Analyze a physics question image using Claude CLI.
- * Returns: solution, answer, knowledge points, OCR text, and error reason.
+ * Phase 1: Read image → OCR + solution + answer + error reason.
+ * No knowledge points in prompt = much shorter prompt, faster.
  */
-export async function analyzeQuestion(imagePath: string, onProgress?: ProgressCallback, isLargeQuestion?: boolean): Promise<AnalysisResult> {
-  const absolutePath = path.resolve(imagePath);
-  if (!existsSync(absolutePath)) {
-    throw new Error(`Image file not found: ${absolutePath}`);
-  }
-
-  const knowledgeMap = getKnowledgePointsSummary();
-
+async function phase1_analyzeImage(absolutePath: string, onProgress?: ProgressCallback, isLargeQuestion?: boolean): Promise<{ solution: string; answer: string; ocrText: string; errorReason: string }> {
   const prompt = `请先使用Read工具读取并查看这张物理题目的图片文件，然后分析题目。
 
 图片文件的绝对路径：${absolutePath}
@@ -295,21 +288,14 @@ export async function analyzeQuestion(imagePath: string, onProgress?: ProgressCa
 
 1. **解题思路**：给出清晰的解题步骤（用中文）
 2. **答案**：给出最终答案
-3. **知识点归类**：从知识点列表中选出最核心典型的1-3个
-4. **OCR提取**：提取图片中题目的完整文字内容，保留原有的排版格式（编号、子题结构、换行等）
-5. **错误原因**：仔细观察图片中是否有学生的做题痕迹（手写笔迹、圈画、计算过程、勾选的答案等）。如果有学生做题痕迹，请分析学生的错误原因，用简洁明确的语言描述（1-2句话）。如果图片中没有任何学生做题痕迹（即只是一道干净的题目），则返回空字符串。
-
-知识点列表：
-${knowledgeMap}
+3. **OCR提取**：提取图片中题目的完整文字内容，保留原有的排版格式（编号、子题结构、换行等）
+4. **错误原因**：仔细观察图片中是否有学生的做题痕迹（手写笔迹、圈画、计算过程、勾选的答案等）。如果有学生做题痕迹，请分析学生的错误原因，用简洁明确的语言描述（1-2句话）。如果图片中没有任何学生做题痕迹（即只是一道干净的题目），则返回空字符串。
 
 请严格按以下JSON格式输出（不要输出其他内容）：
 \`\`\`json
 {
   "solution": "解题思路...",
   "answer": "最终答案...",
-  "knowledgePoints": [
-    {"seq": 序号数字, "reason": "理由"}
-  ],
   "ocrText": "题目原文...",
   "errorReason": "错误原因（无学生痕迹则为空字符串）"
 }
@@ -317,8 +303,146 @@ ${knowledgeMap}
 
   const timeoutMs = isLargeQuestion ? 600_000 : 300_000;
   const stdout = await runClaude(prompt, path.dirname(absolutePath), onProgress, timeoutMs);
+  const result = parsePhase1Result(stdout);
+  return result;
+}
+
+/**
+ * Parse Phase 1 result (no knowledgePoints field).
+ */
+function parsePhase1Result(stdout: string): { solution: string; answer: string; ocrText: string; errorReason: string } {
+  const codeBlockMatch = stdout.match(/```json\s*([\s\S]*?)\s*```/);
+  const rawJsonMatch = stdout.match(/\{[\s\S]*"solution"[\s\S]*"answer"[\s\S]*\}/);
+  const jsonStr = (codeBlockMatch ? codeBlockMatch[1] : null) ||
+                  (rawJsonMatch ? rawJsonMatch[0] : null) ||
+                  stdout.trim();
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return {
+      solution: (parsed.solution as string) || '',
+      answer: (parsed.answer as string) || '',
+      ocrText: (parsed.ocrText as string) || '',
+      errorReason: (parsed.errorReason as string) || '',
+    };
+  } catch { /* continue */ }
+
+  try {
+    const fixed = fixJsonUnescapedQuotes(jsonStr);
+    const parsed = JSON.parse(fixed);
+    return {
+      solution: (parsed.solution as string) || '',
+      answer: (parsed.answer as string) || '',
+      ocrText: (parsed.ocrText as string) || '',
+      errorReason: (parsed.errorReason as string) || '',
+    };
+  } catch { /* continue */ }
+
+  // Fallback: raw text as solution
+  return {
+    solution: stdout.trim() || '(AI未返回有效内容)',
+    answer: '(AI返回格式异常)',
+    ocrText: '',
+    errorReason: '',
+  };
+}
+
+/**
+ * Phase 2: Given OCR text and solution → match knowledge points.
+ * Pure text, no image reading needed = very fast.
+ */
+async function phase2_matchKnowledgePoints(ocrText: string, solution: string, onProgress?: ProgressCallback): Promise<{ seq: number; reason: string }[]> {
+  const knowledgeMap = getKnowledgePointsSummary();
+
+  const prompt = `你是一个高中物理知识点分类专家。请根据以下题目内容和解题思路，从知识点列表中选出最核心典型的1-3个知识点。
+
+题目原文：
+${ocrText || '(无OCR文本)'}
+
+解题思路：
+${solution}
+
+知识点列表：
+${knowledgeMap}
+
+请严格按以下JSON格式输出（不要输出其他内容）：
+\`\`\`json
+{
+  "knowledgePoints": [
+    {"seq": 序号数字, "reason": "选择理由"}
+  ]
+}
+\`\`\``;
+
+  // Phase 2 is text-only, no image, no Read tool needed — use shorter timeout and no tools
+  const stdout = await runClaude(prompt, undefined, onProgress, 120_000);
+  return parsePhase2Result(stdout);
+}
+
+/**
+ * Parse Phase 2 result (only knowledgePoints).
+ */
+function parsePhase2Result(stdout: string): { seq: number; reason: string }[] {
+  const codeBlockMatch = stdout.match(/```json\s*([\s\S]*?)\s*```/);
+  const rawJsonMatch = stdout.match(/\{[\s\S]*"knowledgePoints"[\s\S]*\}/);
+  const jsonStr = (codeBlockMatch ? codeBlockMatch[1] : null) ||
+                  (rawJsonMatch ? rawJsonMatch[0] : null) ||
+                  stdout.trim();
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return Array.isArray(parsed.knowledgePoints) ? parsed.knowledgePoints : [];
+  } catch { /* continue */ }
+
+  try {
+    const fixed = fixJsonUnescapedQuotes(jsonStr);
+    const parsed = JSON.parse(fixed);
+    return Array.isArray(parsed.knowledgePoints) ? parsed.knowledgePoints : [];
+  } catch { /* continue */ }
+
+  // Try array extraction
+  try {
+    const kpMatch = jsonStr.match(/"knowledgePoints"\s*:\s*(\[[\s\S]*?\])/);
+    if (kpMatch) return JSON.parse(kpMatch[1]);
+  } catch { /* continue */ }
+
+  return [];
+}
+
+/**
+ * Analyze a physics question image using two-phase Claude CLI calls.
+ * Phase 1: Read image → OCR + solution + answer + error reason (no KP list, fast)
+ * Phase 2: Text-only → match knowledge points (no image, very fast)
+ */
+export async function analyzeQuestion(imagePath: string, onProgress?: ProgressCallback, isLargeQuestion?: boolean): Promise<AnalysisResult> {
+  const absolutePath = path.resolve(imagePath);
+  if (!existsSync(absolutePath)) {
+    throw new Error(`Image file not found: ${absolutePath}`);
+  }
+
+  // Phase 1: image analysis (OCR + solution + answer + error reason)
+  if (onProgress) onProgress('第1步：AI正在读取图片并分析题目...', 10);
+  const phase1 = await phase1_analyzeImage(absolutePath, (msg, pct) => {
+    // Map phase1 progress to 10%-70% range
+    if (onProgress) onProgress(`第1步：${msg}`, 10 + Math.round(pct * 0.6));
+  }, isLargeQuestion);
+
+  // Phase 2: knowledge point matching (text-only, fast)
+  if (onProgress) onProgress('第2步：正在匹配知识点...', 75);
+  const knowledgePoints = await phase2_matchKnowledgePoints(phase1.ocrText, phase1.solution, (msg, pct) => {
+    // Map phase2 progress to 75%-95% range
+    if (onProgress) onProgress(`第2步：${msg}`, 75 + Math.round(pct * 0.2));
+  });
+
   if (onProgress) onProgress('分析完成！', 100);
-  return parseAnalysisResult(stdout);
+
+  return {
+    solution: phase1.solution,
+    answer: phase1.answer,
+    ocrText: phase1.ocrText,
+    errorReason: phase1.errorReason,
+    knowledgePoints,
+  };
 }
 
 /**
