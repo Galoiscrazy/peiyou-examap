@@ -38,6 +38,8 @@ interface MasteryItem {
 interface StudentData {
   id: number;
   name: string;
+  wechat_id: string;
+  student_code: string;
   school: string;
   initial_grade: number;
   enrollment_year: number;
@@ -84,7 +86,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
 
   // Edit student modal
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', school: '', current_grade: 1 });
+  const [editForm, setEditForm] = useState({ name: '', wechat_id: '', student_code: '', school: '', current_grade: 1 });
 
   // History filters
   const [historySearch, setHistorySearch] = useState('');
@@ -138,6 +140,8 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
     const gradeNum = gradeMap[student.current_grade] || student.initial_grade;
     setEditForm({
       name: student.name,
+      wechat_id: student.wechat_id || '',
+      student_code: student.student_code || '',
       school: student.school,
       current_grade: gradeNum,
     });
@@ -149,6 +153,8 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
     const academicYear = getAcademicYear();
     const payload = {
       name: editForm.name,
+      wechat_id: editForm.wechat_id,
+      student_code: editForm.student_code,
       school: editForm.school,
       initial_grade: editForm.current_grade,
       enrollment_year: academicYear,
@@ -203,7 +209,11 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
             编辑信息
           </button>
         </div>
-        <p className="text-slate-500 text-sm mt-1">{student.school || '未填写学校'}</p>
+        <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
+          <span>{student.school || '未填写学校'}</span>
+          {student.wechat_id && <span>微信: {student.wechat_id}</span>}
+          {student.student_code && <span>编码: {student.student_code}</span>}
+        </div>
       </div>
 
       {/* Edit Modal */}
@@ -221,6 +231,26 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                   onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium mb-1">微信号</label>
+                  <input
+                    type="text"
+                    value={editForm.wechat_id}
+                    onChange={e => setEditForm({ ...editForm, wechat_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium mb-1">学员编码</label>
+                  <input
+                    type="text"
+                    value={editForm.student_code}
+                    onChange={e => setEditForm({ ...editForm, student_code: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">学校</label>

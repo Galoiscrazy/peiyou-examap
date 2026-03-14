@@ -74,7 +74,7 @@ function getKnowledgePointsSummary(): string {
  * Call Claude CLI asynchronously (non-blocking).
  * Uses async spawn so the event loop stays free (HMR stays alive, no page reload).
  */
-function runClaude(prompt: string, cwd?: string, onProgress?: ProgressCallback): Promise<string> {
+function runClaude(prompt: string, cwd?: string, onProgress?: ProgressCallback, timeoutMs?: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     delete env.CLAUDECODE;  // prevent nested Claude Code detection
@@ -164,14 +164,15 @@ function runClaude(prompt: string, cwd?: string, onProgress?: ProgressCallback):
     child.stdin.write(prompt);
     child.stdin.end();
 
-    // 5-minute timeout: resolve with whatever stdout we have, or reject
+    // Timeout: resolve with whatever stdout we have, or reject
+    const timeout = timeoutMs || 300_000;
     setTimeout(() => {
       if (stdout.trim()) {
         finish(stdout);
       } else {
-        finish(null, 'Claude CLI timed out (300s) with no output');
+        finish(null, `Claude CLI timed out (${timeout / 1000}s) with no output`);
       }
-    }, 300000);
+    }, timeout);
   });
 }
 
@@ -278,7 +279,7 @@ function normalize(parsed: Record<string, unknown>): AnalysisResult {
  * Analyze a physics question image using Claude CLI.
  * Returns: solution, answer, knowledge points, OCR text, and error reason.
  */
-export async function analyzeQuestion(imagePath: string, onProgress?: ProgressCallback): Promise<AnalysisResult> {
+export async function analyzeQuestion(imagePath: string, onProgress?: ProgressCallback, isLargeQuestion?: boolean): Promise<AnalysisResult> {
   const absolutePath = path.resolve(imagePath);
   if (!existsSync(absolutePath)) {
     throw new Error(`Image file not found: ${absolutePath}`);
@@ -314,7 +315,8 @@ ${knowledgeMap}
 }
 \`\`\``;
 
-  const stdout = await runClaude(prompt, path.dirname(absolutePath), onProgress);
+  const timeoutMs = isLargeQuestion ? 600_000 : 300_000;
+  const stdout = await runClaude(prompt, path.dirname(absolutePath), onProgress, timeoutMs);
   if (onProgress) onProgress('分析完成！', 100);
   return parseAnalysisResult(stdout);
 }
@@ -322,6 +324,6 @@ ${knowledgeMap}
 /**
  * Alias for analyzeQuestion.
  */
-export async function analyzeQuestionWithFile(imagePath: string, onProgress?: ProgressCallback): Promise<AnalysisResult> {
-  return analyzeQuestion(imagePath, onProgress);
+export async function analyzeQuestionWithFile(imagePath: string, onProgress?: ProgressCallback, isLargeQuestion?: boolean): Promise<AnalysisResult> {
+  return analyzeQuestion(imagePath, onProgress, isLargeQuestion);
 }

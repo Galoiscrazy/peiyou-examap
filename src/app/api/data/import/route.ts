@@ -42,11 +42,11 @@ export async function POST(request: NextRequest) {
 
       // 2. Import students
       const insertStudent = db.prepare(
-        'INSERT INTO students (id, name, school, initial_grade, enrollment_year, graduation_year, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO students (id, name, wechat_id, student_code, school, initial_grade, enrollment_year, graduation_year, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const s of body.data.students) {
         insertStudent.run(
-          s.id, s.name, s.school || '',
+          s.id, s.name, s.wechat_id || '', s.student_code || '', s.school || '',
           s.initial_grade || 1, s.enrollment_year, s.graduation_year,
           s.created_at || new Date().toISOString()
         );

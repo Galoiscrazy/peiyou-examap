@@ -6,6 +6,8 @@ import Link from 'next/link';
 interface Student {
   id: number;
   name: string;
+  wechat_id: string;
+  student_code: string;
   school: string;
   initial_grade: number;
   enrollment_year: number;
@@ -19,7 +21,7 @@ function getAcademicYear() {
   return now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
 }
 
-const emptyForm = () => ({ name: '', school: '', current_grade: 1 });
+const emptyForm = () => ({ name: '', wechat_id: '', student_code: '', school: '', current_grade: 1 });
 
 export default function HomePage() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -46,6 +48,8 @@ export default function HomePage() {
     const academicYear = getAcademicYear();
     const payload = {
       name: form.name,
+      wechat_id: form.wechat_id,
+      student_code: form.student_code,
       school: form.school,
       initial_grade: form.current_grade,
       enrollment_year: academicYear,
@@ -78,6 +82,8 @@ export default function HomePage() {
     const gradeNum = gradeMap[student.current_grade] || student.initial_grade;
     setForm({
       name: student.name,
+      wechat_id: student.wechat_id || '',
+      student_code: student.student_code || '',
       school: student.school,
       current_grade: gradeNum,
     });
@@ -99,7 +105,9 @@ export default function HomePage() {
   }
 
   const filtered = students.filter(s =>
-    s.name.includes(search) || s.school.includes(search)
+    s.name.includes(search) || s.school.includes(search) ||
+    (s.wechat_id && s.wechat_id.includes(search)) ||
+    (s.student_code && s.student_code.includes(search))
   );
 
   return (
@@ -117,7 +125,7 @@ export default function HomePage() {
       <div className="mb-4">
         <input
           type="text"
-          placeholder="搜索学生姓名或学校..."
+          placeholder="搜索姓名、微信号、学员编码、学校..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="w-full max-w-md px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -139,6 +147,26 @@ export default function HomePage() {
                   onChange={e => setForm({ ...form, name: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium mb-1">微信号</label>
+                  <input
+                    type="text"
+                    value={form.wechat_id}
+                    onChange={e => setForm({ ...form, wechat_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium mb-1">学员编码</label>
+                  <input
+                    type="text"
+                    value={form.student_code}
+                    onChange={e => setForm({ ...form, student_code: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">学校</label>
@@ -185,6 +213,7 @@ export default function HomePage() {
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-bold text-lg">{student.name}</h3>
+                {student.student_code && <p className="text-xs text-slate-400">{student.student_code}</p>}
                 <p className="text-sm text-slate-500 mt-1">{student.school || '未填写学校'}</p>
               </div>
               <div className="flex items-center gap-2">

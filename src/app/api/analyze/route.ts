@@ -3,7 +3,7 @@ import { analyzeQuestionWithFile } from '@/lib/claude';
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { image_path } = body;
+  const { image_path, is_large_question } = body;
 
   if (!image_path) {
     return new Response(
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
         const result = await analyzeQuestionWithFile(image_path, (message, percent) => {
           send('progress', { step: 'analyzing', message, percent });
-        });
+        }, !!is_large_question);
 
         send('progress', { step: 'done', message: '分析完成！', percent: 100 });
         send('result', result);

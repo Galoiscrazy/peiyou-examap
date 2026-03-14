@@ -60,17 +60,18 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await request.json();
-  const { name, school, initial_grade, enrollment_year } = body;
+  const { name, wechat_id, student_code, school, initial_grade, enrollment_year } = body;
 
   const db = getDb();
 
   if (initial_grade !== undefined && enrollment_year !== undefined) {
     const graduation_year = calcGraduationYear(initial_grade, enrollment_year);
     db.prepare(
-      'UPDATE students SET name = ?, school = ?, initial_grade = ?, enrollment_year = ?, graduation_year = ? WHERE id = ?'
-    ).run(name, school || '', initial_grade, enrollment_year, graduation_year, Number(id));
+      'UPDATE students SET name = ?, wechat_id = ?, student_code = ?, school = ?, initial_grade = ?, enrollment_year = ?, graduation_year = ? WHERE id = ?'
+    ).run(name, wechat_id || '', student_code || '', school || '', initial_grade, enrollment_year, graduation_year, Number(id));
   } else {
-    db.prepare('UPDATE students SET name = ?, school = ? WHERE id = ?').run(name, school || '', Number(id));
+    db.prepare('UPDATE students SET name = ?, wechat_id = ?, student_code = ?, school = ? WHERE id = ?')
+      .run(name, wechat_id || '', student_code || '', school || '', Number(id));
   }
 
   return NextResponse.json({ message: '更新成功' });

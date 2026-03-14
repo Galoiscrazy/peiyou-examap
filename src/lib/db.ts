@@ -32,6 +32,8 @@ function initTables(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS students (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      wechat_id TEXT DEFAULT '',
+      student_code TEXT DEFAULT '',
       school TEXT DEFAULT '',
       initial_grade INTEGER NOT NULL DEFAULT 1,
       enrollment_year INTEGER NOT NULL,
@@ -83,4 +85,6 @@ function initTables(db: Database.Database) {
   // Migration: add new columns (safe to re-run)
   try { db.exec('ALTER TABLE questions ADD COLUMN ocr_text TEXT DEFAULT ""'); } catch {}
   try { db.exec('ALTER TABLE questions ADD COLUMN error_reason TEXT DEFAULT ""'); } catch {}
+  try { db.exec('ALTER TABLE students ADD COLUMN wechat_id TEXT DEFAULT ""'); } catch {}
+  try { db.exec('ALTER TABLE students ADD COLUMN student_code TEXT DEFAULT ""'); } catch {}
 }

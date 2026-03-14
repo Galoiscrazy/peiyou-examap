@@ -21,7 +21,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { name, school, initial_grade, enrollment_year } = body;
+  const { name, wechat_id, student_code, school, initial_grade, enrollment_year } = body;
 
   if (!name || !initial_grade || !enrollment_year) {
     return NextResponse.json({ error: '缺少必填字段' }, { status: 400 });
@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
   const graduation_year = calcGraduationYear(initial_grade, enrollment_year);
 
   const result = db.prepare(`
-    INSERT INTO students (name, school, initial_grade, enrollment_year, graduation_year)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(name, school || '', initial_grade, enrollment_year, graduation_year);
+    INSERT INTO students (name, wechat_id, student_code, school, initial_grade, enrollment_year, graduation_year)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(name, wechat_id || '', student_code || '', school || '', initial_grade, enrollment_year, graduation_year);
 
   return NextResponse.json({ id: result.lastInsertRowid, message: '学生创建成功' });
 }
