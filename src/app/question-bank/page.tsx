@@ -40,6 +40,7 @@ export default function QuestionBankPage() {
   const [selectedKpSeqs, setSelectedKpSeqs] = useState<Set<number>>(new Set());
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<number>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // KP tree expand state
   const [expandedL1, setExpandedL1] = useState<Set<string>>(new Set());
@@ -105,30 +106,35 @@ export default function QuestionBankPage() {
     }
   }
 
-  async function handleExport() {
+  async function doExport(format: 'latex' | 'docx' | 'both') {
     if (selectedQuestionIds.size === 0) {
       alert('请先选择要导出的题目');
       return;
     }
+    setShowExportMenu(false);
     setExporting(true);
     try {
-      const res = await fetch('/api/question-bank/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionIds: Array.from(selectedQuestionIds) }),
-      });
-      if (!res.ok) {
-        let errMsg = '导出失败';
-        try { const err = await res.json(); errMsg = err.error || errMsg; } catch { /* ignore */ }
-        throw new Error(errMsg);
+      const ids = Array.from(selectedQuestionIds);
+      const formats = format === 'both' ? ['latex', 'docx'] : [format];
+      for (const fmt of formats) {
+        const res = await fetch('/api/question-bank/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questionIds: ids, format: fmt }),
+        });
+        if (!res.ok) {
+          let errMsg = '导出失败';
+          try { const err = await res.json(); errMsg = err.error || errMsg; } catch { /* ignore */ }
+          throw new Error(errMsg);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fmt === 'latex' ? '物理题目导出.zip' : '物理题目导出.docx';
+        a.click();
+        URL.revokeObjectURL(url);
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = '物理题目导出.zip';
-      a.click();
-      URL.revokeObjectURL(url);
     } catch (err) {
       alert(`导出失败: ${err instanceof Error ? err.message : '未知错误'}`);
     } finally {
@@ -269,13 +275,40 @@ export default function QuestionBankPage() {
               </button>
             </div>
 
-            <button
-              onClick={handleExport}
-              disabled={selectedQuestionIds.size === 0 || exporting}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {exporting ? '导出中...' : `导出选中 (${selectedQuestionIds.size})`}
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => {
+                  if (selectedQuestionIds.size === 0) { alert('请先选择要导出的题目'); return; }
+                  setShowExportMenu(!showExportMenu);
+                }}
+                disabled={exporting}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {exporting ? '导出中...' : `导出 (${selectedQuestionIds.size}题) ▾`}
+              </button>
+              {showExportMenu && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[180px]">
+                  <button
+                    onClick={() => doExport('latex')}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 rounded-t-lg flex items-center gap-2"
+                  >
+                    <span>📄</span> LaTeX (.zip)
+                  </button>
+                  <button
+                    onClick={() => doExport('docx')}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 flex items-center gap-2"
+                  >
+                    <span>📝</span> Word (.docx)
+                  </button>
+                  <button
+                    onClick={() => doExport('both')}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 rounded-b-lg flex items-center gap-2 border-t border-slate-100"
+                  >
+                    <span>📦</span> 两个都要
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Summary */}
