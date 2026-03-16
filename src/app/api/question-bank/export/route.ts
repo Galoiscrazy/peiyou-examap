@@ -114,8 +114,9 @@ async function exportLatex(parsed: ParsedQuestion[], topicName: string): Promise
     }
 
     if (q.image_path) {
-      const filename = path.basename(q.image_path);
-      const fullPath = path.join(dataDir, filename);
+      // 数据库里存的是绝对路径，直接用；也兼容相对路径
+      const fullPath = path.isAbsolute(q.image_path) ? q.image_path : path.join(dataDir, path.basename(q.image_path));
+      const filename = path.basename(fullPath);
       if (existsSync(fullPath)) {
         const imageBuffer = readFileSync(fullPath);
         imagesFolder.file(filename, imageBuffer);
@@ -208,8 +209,7 @@ async function exportDocx(parsed: ParsedQuestion[], topicName: string): Promise<
 
     // Image
     if (q.image_path) {
-      const filename = path.basename(q.image_path);
-      const fullPath = path.join(dataDir, filename);
+      const fullPath = path.isAbsolute(q.image_path) ? q.image_path : path.join(dataDir, path.basename(q.image_path));
       if (existsSync(fullPath)) {
         try {
           const imageBuffer = readFileSync(fullPath);
@@ -218,12 +218,14 @@ async function exportDocx(parsed: ParsedQuestion[], topicName: string): Promise<
           const h = dims.height || 400;
           const maxW = 500;
           const scale = Math.min(1, maxW / w);
+          const ext = path.extname(fullPath).toLowerCase();
+          const imgType = ext === '.png' ? 'png' : 'jpg';
           sections.push(new Paragraph({
             children: [
               new ImageRun({
                 data: imageBuffer,
                 transformation: { width: Math.round(w * scale), height: Math.round(h * scale) },
-                type: 'jpg',
+                type: imgType,
               }),
             ],
             spacing: { after: 200 },
