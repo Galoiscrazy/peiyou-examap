@@ -74,7 +74,15 @@ function getKnowledgePointsSummary(): string {
  * Call Claude CLI asynchronously (non-blocking).
  * Uses async spawn so the event loop stays free (HMR stays alive, no page reload).
  */
-function runClaude(prompt: string, cwd?: string, onProgress?: ProgressCallback, timeoutMs?: number): Promise<string> {
+interface RunClaudeOptions {
+  cwd?: string;
+  onProgress?: ProgressCallback;
+  timeoutMs?: number;
+  needsTools?: boolean;  // true = needs Read tool (image phase), false = pure text (faster)
+}
+
+function runClaude(prompt: string, options: RunClaudeOptions = {}): Promise<string> {
+  const { cwd, onProgress, timeoutMs, needsTools = true } = options;
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     delete env.CLAUDECODE;  // prevent nested Claude Code detection
@@ -82,15 +90,21 @@ function runClaude(prompt: string, cwd?: string, onProgress?: ProgressCallback, 
     const args = [
       '--print',
       '--output-format', 'text',
-      '--dangerously-skip-permissions',  // required: skip permission prompts in non-interactive mode
-      '--allowedTools', 'Read',          // safety: only allow Read tool
-      '--max-turns', '5',
+      '--dangerously-skip-permissions',
     ];
+
+    if (needsTools) {
+      // Image phase: needs Read tool, allow enough turns to read + respond
+      args.push('--allowedTools', 'Read', '--max-turns', '3');
+    } else {
+      // Pure text phase: no tools, single turn = much faster
+      args.push('--max-turns', '1');
+    }
 
     console.log(`[Claude] Running: ${CLAUDE_CLI} ${args.join(' ')}`);
     console.log(`[Claude] Prompt length: ${prompt.length}, CWD: ${cwd || process.cwd()}`);
 
-    if (onProgress) onProgress('Claude CLI 已启动，正在读取图片...', 15);
+    if (onProgress) onProgress(needsTools ? 'Claude CLI 已启动，正在读取图片...' : 'Claude CLI 已启动，正在处理...', 15);
 
     const child = spawn(CLAUDE_CLI, args, {
       shell: true,
@@ -244,7 +258,7 @@ async function phase1_ocr(absolutePath: string, onProgress?: ProgressCallback, t
 }
 \`\`\``;
 
-  const stdout = await runClaude(prompt, path.dirname(absolutePath), onProgress, timeoutMs);
+  const stdout = await runClaude(prompt, { cwd: path.dirname(absolutePath), onProgress, timeoutMs, needsTools: true });
   return parseJsonFields(stdout, ['ocrText', 'errorReason']) as { ocrText: string; errorReason: string };
 }
 
@@ -270,7 +284,7 @@ ${ocrText}
 
 请直接输出分析内容，用清晰的中文，不需要JSON格式。`;
 
-  const stdout = await runClaude(prompt, undefined, onProgress, timeoutMs);
+  const stdout = await runClaude(prompt, { onProgress, timeoutMs, needsTools: false });
   return stdout.trim();
 }
 
@@ -295,7 +309,7 @@ ${analysis}
 }
 \`\`\``;
 
-  const stdout = await runClaude(prompt, undefined, onProgress, timeoutMs);
+  const stdout = await runClaude(prompt, { onProgress, timeoutMs, needsTools: false });
   return parseJsonFields(stdout, ['solution', 'answer']) as { solution: string; answer: string };
 }
 
@@ -326,7 +340,7 @@ ${knowledgeMap}
 }
 \`\`\``;
 
-  const stdout = await runClaude(prompt, undefined, onProgress, timeoutMs);
+  const stdout = await runClaude(prompt, { onProgress, timeoutMs, needsTools: false });
   const result = parseJsonFields(stdout, ['knowledgePoints']);
   return Array.isArray(result.knowledgePoints) ? result.knowledgePoints : [];
 }
