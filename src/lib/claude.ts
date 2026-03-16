@@ -226,7 +226,7 @@ function fixJsonUnescapedQuotes(jsonStr: string): string {
  * Phase 1: 看题 — Read image, extract text, detect student marks.
  * Only does visual recognition, no solving.
  */
-async function phase1_ocr(absolutePath: string, onProgress?: ProgressCallback): Promise<{ ocrText: string; errorReason: string }> {
+async function phase1_ocr(absolutePath: string, onProgress?: ProgressCallback, timeoutMs = 180_000): Promise<{ ocrText: string; errorReason: string }> {
   const prompt = `请先使用Read工具读取并查看这张物理题目的图片文件。
 
 图片文件的绝对路径：${absolutePath}
@@ -244,7 +244,7 @@ async function phase1_ocr(absolutePath: string, onProgress?: ProgressCallback): 
 }
 \`\`\``;
 
-  const stdout = await runClaude(prompt, path.dirname(absolutePath), onProgress, 180_000);
+  const stdout = await runClaude(prompt, path.dirname(absolutePath), onProgress, timeoutMs);
   return parseJsonFields(stdout, ['ocrText', 'errorReason']) as { ocrText: string; errorReason: string };
 }
 
@@ -252,7 +252,7 @@ async function phase1_ocr(absolutePath: string, onProgress?: ProgressCallback): 
  * Phase 2: 审题 — Analyze problem structure, identify physics model and strategy.
  * Text-only, no image reading.
  */
-async function phase2_analyze(ocrText: string, onProgress?: ProgressCallback): Promise<string> {
+async function phase2_analyze(ocrText: string, onProgress?: ProgressCallback, timeoutMs = 180_000): Promise<string> {
   const prompt = `你是一位高考物理解题专家。请仔细审题，完成以下分析（只分析，不要列式计算）：
 
 题目原文：
@@ -270,7 +270,7 @@ ${ocrText}
 
 请直接输出分析内容，用清晰的中文，不需要JSON格式。`;
 
-  const stdout = await runClaude(prompt, undefined, onProgress, 180_000);
+  const stdout = await runClaude(prompt, undefined, onProgress, timeoutMs);
   return stdout.trim();
 }
 
@@ -278,7 +278,7 @@ ${ocrText}
  * Phase 3: 解题 — Solve the problem using the strategy from phase 2.
  * Text-only, has clear direction from analysis phase.
  */
-async function phase3_solve(ocrText: string, analysis: string, onProgress?: ProgressCallback): Promise<{ solution: string; answer: string }> {
+async function phase3_solve(ocrText: string, analysis: string, onProgress?: ProgressCallback, timeoutMs = 300_000): Promise<{ solution: string; answer: string }> {
   const prompt = `你是一位高考物理解题专家。请根据以下题目和审题分析，完成详细的解题过程。
 
 题目原文：
@@ -295,7 +295,7 @@ ${analysis}
 }
 \`\`\``;
 
-  const stdout = await runClaude(prompt, undefined, onProgress, 300_000);
+  const stdout = await runClaude(prompt, undefined, onProgress, timeoutMs);
   return parseJsonFields(stdout, ['solution', 'answer']) as { solution: string; answer: string };
 }
 
@@ -303,7 +303,7 @@ ${analysis}
  * Phase 4: 归类 — Match knowledge points from the 533-item list.
  * Text-only, uses OCR + solution.
  */
-async function phase4_matchKnowledgePoints(ocrText: string, solution: string, onProgress?: ProgressCallback): Promise<{ seq: number; reason: string }[]> {
+async function phase4_matchKnowledgePoints(ocrText: string, solution: string, onProgress?: ProgressCallback, timeoutMs = 120_000): Promise<{ seq: number; reason: string }[]> {
   const knowledgeMap = getKnowledgePointsSummary();
 
   const prompt = `你是一个高中物理知识点分类专家。请根据以下题目内容和解题思路，从知识点列表中选出最核心典型的1-3个知识点。
@@ -326,7 +326,7 @@ ${knowledgeMap}
 }
 \`\`\``;
 
-  const stdout = await runClaude(prompt, undefined, onProgress, 120_000);
+  const stdout = await runClaude(prompt, undefined, onProgress, timeoutMs);
   const result = parseJsonFields(stdout, ['knowledgePoints']);
   return Array.isArray(result.knowledgePoints) ? result.knowledgePoints : [];
 }
@@ -375,38 +375,42 @@ function parseJsonFields(stdout: string, fields: string[]): Record<string, unkno
  * Analyze a physics question image using 4-phase pipeline.
  * Mimics expert solving: 看题 → 审题 → 解题 → 归类
  */
-export async function analyzeQuestion(imagePath: string, onProgress?: ProgressCallback, _isLargeQuestion?: boolean): Promise<AnalysisResult> {
+export async function analyzeQuestion(imagePath: string, onProgress?: ProgressCallback, isLargeQuestion?: boolean): Promise<AnalysisResult> {
   const absolutePath = path.resolve(imagePath);
   if (!existsSync(absolutePath)) {
     throw new Error(`Image file not found: ${absolutePath}`);
   }
 
+  // 大题超时翻倍
+  const mul = isLargeQuestion ? 2 : 1;
+  const label = isLargeQuestion ? '(大题模式) ' : '';
+
   // Phase 1: 看题 (0% → 25%)
-  if (onProgress) onProgress('第1步/4：正在识别图片内容...', 5);
+  if (onProgress) onProgress(`${label}第1步/4：正在识别图片内容...`, 5);
   const { ocrText, errorReason } = await phase1_ocr(absolutePath, (msg, pct) => {
-    if (onProgress) onProgress(`第1步/4 看题：${msg}`, Math.round(pct * 0.25));
-  });
+    if (onProgress) onProgress(`${label}第1步/4 看题：${msg}`, Math.round(pct * 0.25));
+  }, 180_000 * mul);
 
   // Phase 2: 审题 (25% → 50%)
-  if (onProgress) onProgress('第2步/4：正在分析题目结构和解题策略...', 28);
+  if (onProgress) onProgress(`${label}第2步/4：正在分析题目结构和解题策略...`, 28);
   const analysis = await phase2_analyze(ocrText, (msg, pct) => {
-    if (onProgress) onProgress(`第2步/4 审题：${msg}`, 25 + Math.round(pct * 0.25));
-  });
+    if (onProgress) onProgress(`${label}第2步/4 审题：${msg}`, 25 + Math.round(pct * 0.25));
+  }, 180_000 * mul);
 
   // Phase 3: 解题 (50% → 80%)
-  if (onProgress) onProgress('第3步/4：正在列式计算求解...', 53);
+  if (onProgress) onProgress(`${label}第3步/4：正在列式计算求解...`, 53);
   const { solution: solveSolution, answer } = await phase3_solve(ocrText, analysis, (msg, pct) => {
-    if (onProgress) onProgress(`第3步/4 解题：${msg}`, 50 + Math.round(pct * 0.30));
-  });
+    if (onProgress) onProgress(`${label}第3步/4 解题：${msg}`, 50 + Math.round(pct * 0.30));
+  }, 300_000 * mul);
 
   // Combine analysis + solution for the final output
   const solution = `【审题分析】\n${analysis}\n\n【解题过程】\n${solveSolution}`;
 
   // Phase 4: 归类 (80% → 100%)
-  if (onProgress) onProgress('第4步/4：正在匹配知识点标签...', 83);
+  if (onProgress) onProgress(`${label}第4步/4：正在匹配知识点标签...`, 83);
   const knowledgePoints = await phase4_matchKnowledgePoints(ocrText, solveSolution, (msg, pct) => {
-    if (onProgress) onProgress(`第4步/4 归类：${msg}`, 80 + Math.round(pct * 0.20));
-  });
+    if (onProgress) onProgress(`${label}第4步/4 归类：${msg}`, 80 + Math.round(pct * 0.20));
+  }, 120_000 * mul);
 
   if (onProgress) onProgress('分析完成！', 100);
 
