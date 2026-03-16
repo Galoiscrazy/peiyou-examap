@@ -229,11 +229,10 @@ function fixJsonUnescapedQuotes(jsonStr: string): string {
 }
 
 // ============================================================
-// 4-Phase Analysis Pipeline (mimics expert physics solving)
-// Phase 1: 看题 — read image → OCR + error reason (3 min)
-// Phase 2: 审题 — analyze problem structure (3 min, text-only)
-// Phase 3: 解题 — solve with strategy from phase 2 (5 min, text-only)
-// Phase 4: 归类 — match knowledge points (2 min, text-only)
+// 3-Phase Analysis Pipeline (mimics expert physics solving)
+// Phase 1: 看题 — read image → OCR + error reason (needs tools)
+// Phase 2: 审题+解题 — analyze & solve in one flow (text-only)
+// Phase 3: 归类 — match knowledge points (text-only)
 // ============================================================
 
 /**
@@ -263,54 +262,31 @@ async function phase1_ocr(absolutePath: string, onProgress?: ProgressCallback, t
 }
 
 /**
- * Phase 2: 审题 — Analyze problem structure, identify physics model and strategy.
- * Text-only, no image reading.
+ * Phase 2: 审题+解题 — Analyze then solve in one continuous flow.
+ * Text-only, no image reading. Merging saves one CLI startup (~30-60s).
  */
-async function phase2_analyze(ocrText: string, onProgress?: ProgressCallback, timeoutMs = 180_000): Promise<string> {
-  const prompt = `你是一位高考物理解题专家。请仔细审题，完成以下分析（只分析，不要列式计算）：
+async function phase2_solve(ocrText: string, onProgress?: ProgressCallback, timeoutMs = 300_000): Promise<{ analysis: string; solution: string; answer: string }> {
+  const prompt = `你是一位高考物理解题专家。请像高手一样先审题再解题，一气呵成完成分析。
 
 题目原文：
 ${ocrText}
 
-请输出以下内容：
-
-1. **物理情景**：这是什么物理模型？（如：斜面滑块、带电粒子在电场中运动、弹簧振子、电磁感应等）
-2. **已知量**：题目给出了哪些物理量和条件？逐一列出。
-3. **求解目标**：要求什么？最终答案的形式是什么？（数值、表达式、证明、选择等）
-4. **解题策略**：
-   - 应该用什么定律/原理？（如牛顿第二定律、能量守恒、动量定理等）
-   - 解题分几个关键步骤？每步简要说明思路方向。
-   - 如果有多个子题，说明各子题之间的逻辑关系。
-
-请直接输出分析内容，用清晰的中文，不需要JSON格式。`;
-
-  const stdout = await runClaude(prompt, { onProgress, timeoutMs, needsTools: false });
-  return stdout.trim();
-}
-
-/**
- * Phase 3: 解题 — Solve the problem using the strategy from phase 2.
- * Text-only, has clear direction from analysis phase.
- */
-async function phase3_solve(ocrText: string, analysis: string, onProgress?: ProgressCallback, timeoutMs = 300_000): Promise<{ solution: string; answer: string }> {
-  const prompt = `你是一位高考物理解题专家。请根据以下题目和审题分析，完成详细的解题过程。
-
-题目原文：
-${ocrText}
-
-审题分析：
-${analysis}
-
-请严格按以下JSON格式输出（不要输出其他内容）：
+请按以下结构输出JSON（不要输出其他内容）：
 \`\`\`json
 {
-  "solution": "完整的解题过程（包括列式、代入数据、计算步骤，用中文书写）",
+  "analysis": "审题分析：包括物理情景（什么模型）、已知量、求解目标、解题策略（用什么定律/原理、分几步）",
+  "solution": "解题过程：包括列式、代入数据、计算步骤（用中文书写）",
   "answer": "最终答案（简洁明确）"
 }
 \`\`\``;
 
   const stdout = await runClaude(prompt, { onProgress, timeoutMs, needsTools: false });
-  return parseJsonFields(stdout, ['solution', 'answer']) as { solution: string; answer: string };
+  const result = parseJsonFields(stdout, ['analysis', 'solution', 'answer']);
+  return {
+    analysis: (result.analysis as string) || '',
+    solution: (result.solution as string) || '',
+    answer: (result.answer as string) || '',
+  };
 }
 
 /**
@@ -386,8 +362,9 @@ function parseJsonFields(stdout: string, fields: string[]): Record<string, unkno
 }
 
 /**
- * Analyze a physics question image using 4-phase pipeline.
- * Mimics expert solving: 看题 → 审题 → 解题 → 归类
+ * Analyze a physics question image using 3-phase pipeline.
+ * Phase 1: 看题 (read image) → Phase 2: 审题+解题 (text) → Phase 3: 归类 (text)
+ * Only 3 CLI startups instead of 4, saving ~30-60s overhead.
  */
 export async function analyzeQuestion(imagePath: string, onProgress?: ProgressCallback, isLargeQuestion?: boolean): Promise<AnalysisResult> {
   const absolutePath = path.resolve(imagePath);
@@ -399,31 +376,25 @@ export async function analyzeQuestion(imagePath: string, onProgress?: ProgressCa
   const mul = isLargeQuestion ? 2 : 1;
   const label = isLargeQuestion ? '(大题模式) ' : '';
 
-  // Phase 1: 看题 (0% → 25%)
-  if (onProgress) onProgress(`${label}第1步/4：正在识别图片内容...`, 5);
+  // Phase 1: 看题 (0% → 30%)
+  if (onProgress) onProgress(`${label}第1步/3：正在识别图片内容...`, 5);
   const { ocrText, errorReason } = await phase1_ocr(absolutePath, (msg, pct) => {
-    if (onProgress) onProgress(`${label}第1步/4 看题：${msg}`, Math.round(pct * 0.25));
+    if (onProgress) onProgress(`${label}第1步/3 看题：${msg}`, Math.round(pct * 0.30));
   }, 180_000 * mul);
 
-  // Phase 2: 审题 (25% → 50%)
-  if (onProgress) onProgress(`${label}第2步/4：正在分析题目结构和解题策略...`, 28);
-  const analysis = await phase2_analyze(ocrText, (msg, pct) => {
-    if (onProgress) onProgress(`${label}第2步/4 审题：${msg}`, 25 + Math.round(pct * 0.25));
-  }, 180_000 * mul);
-
-  // Phase 3: 解题 (50% → 80%)
-  if (onProgress) onProgress(`${label}第3步/4：正在列式计算求解...`, 53);
-  const { solution: solveSolution, answer } = await phase3_solve(ocrText, analysis, (msg, pct) => {
-    if (onProgress) onProgress(`${label}第3步/4 解题：${msg}`, 50 + Math.round(pct * 0.30));
+  // Phase 2: 审题+解题 (30% → 80%)
+  if (onProgress) onProgress(`${label}第2步/3：正在审题并求解...`, 33);
+  const { analysis, solution: solveSolution, answer } = await phase2_solve(ocrText, (msg, pct) => {
+    if (onProgress) onProgress(`${label}第2步/3 解题：${msg}`, 30 + Math.round(pct * 0.50));
   }, 300_000 * mul);
 
-  // Combine analysis + solution for the final output
+  // Combine analysis + solution for display
   const solution = `【审题分析】\n${analysis}\n\n【解题过程】\n${solveSolution}`;
 
-  // Phase 4: 归类 (80% → 100%)
-  if (onProgress) onProgress(`${label}第4步/4：正在匹配知识点标签...`, 83);
+  // Phase 3: 归类 (80% → 100%)
+  if (onProgress) onProgress(`${label}第3步/3：正在匹配知识点标签...`, 83);
   const knowledgePoints = await phase4_matchKnowledgePoints(ocrText, solveSolution, (msg, pct) => {
-    if (onProgress) onProgress(`${label}第4步/4 归类：${msg}`, 80 + Math.round(pct * 0.20));
+    if (onProgress) onProgress(`${label}第3步/3 归类：${msg}`, 80 + Math.round(pct * 0.20));
   }, 120_000 * mul);
 
   if (onProgress) onProgress('分析完成！', 100);
