@@ -126,7 +126,7 @@ export default function QuestionBankPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'question-bank-export.docx';
+      a.download = '物理题目导出.zip';
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
