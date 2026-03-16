@@ -118,8 +118,9 @@ export default function QuestionBankPage() {
         body: JSON.stringify({ questionIds: Array.from(selectedQuestionIds) }),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || '导出失败');
+        let errMsg = '导出失败';
+        try { const err = await res.json(); errMsg = err.error || errMsg; } catch { /* ignore */ }
+        throw new Error(errMsg);
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
